@@ -1,89 +1,81 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="Asignación de turnos de enfermeras", layout="wide")
+# ---------- CONFIGURACIÓN ----------
+st.set_page_config(layout="wide", page_title="Asignación de Turnos")
 
-# ------------------ INTRO ------------------
-st.title("📅 Sistema de Asignación Óptima de Turnos de Enfermería")
-st.markdown("""
-Este panel muestra una solución generada mediante **Optimización Matemática**.
-El modelo busca asignar turnos respetando:
+df = pd.read_csv("resultado_asignacion.csv")
 
-✔ Máximo turnos por enfermera  
-✔ Descansos obligatorios    
-✔ Mínimos requeridos por turno  
+days = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]
+shift_names = ["Mañana","Tarde","Noche"]
 
-El objetivo NO es llenar todo, sino asignar los turnos de forma válida cumpliendo reglas laborales.
-""")
+# Crear tabla legible en formato calendario
+calendar_df = pd.DataFrame(columns=["Enfermera", "Día", "Turno"])
 
-# ------------------ CARGA DE DATOS ------------------
-file_path = "resultado_asignacion.csv"
+for nurse_idx, row in df.iterrows():
+    for j, value in enumerate(row):
+        if value == 1:
+            day = days[j // 3]
+            shift = shift_names[j % 3]
+            calendar_df.loc[len(calendar_df)] = [f"Enfermera {nurse_idx+1}", day, shift]
 
-try:
-    df = pd.read_csv(file_path)
-    st.success("Archivo cargado correctamente.")
-except Exception as e:
-    st.error(f"No se pudo cargar el archivo: {e}")
-    st.stop()
+# ---------- Título ----------
+st.title("📅 Sistema de Asignación Óptima de Turnos")
 
-st.subheader("📄 Vista general de la solución")
-st.write(f"Número total de enfermeras: **{df.shape[0]}**")
-st.write(f"Número total de turnos: **{df.shape[1]}**")
+# ---------- Resumen ----------
+st.subheader("📊 Resumen del sistema")
 
-st.dataframe(df, use_container_width=True)
+assigned = len(calendar_df)
+possible = df.size
+coverage = round(assigned / possible * 100, 2)
 
-# ------------------ SELECCIÓN INTERACTIVA ------------------
+col1, col2, col3 = st.columns(3)
+col1.metric("Enfermeras", df.shape[0])
+col2.metric("Turnos cubiertos", assigned)
+col3.metric("Ocupación del sistema", f"{coverage}%")
+
 st.divider()
-st.subheader("🔍 Exploración interactiva")
 
-col1, col2 = st.columns(2)
+# ---------- Visualización amigable ----------
+st.subheader("👩‍⚕️ Buscar horario de una enfermera")
 
-with col1:
-    nurse = st.selectbox("Selecciona una enfermera para ver sus turnos:", df.index)
-    nurse_schedule = df.iloc[nurse]
-    assigned_shifts = list(np.where(nurse_schedule == 1)[0] + 1)
+nurse_selected = st.selectbox("Selecciona una enfermera:", sorted(calendar_df["Enfermera"].unique()))
 
-    st.write(f"**Turnos asignados:** {assigned_shifts if assigned_shifts else 'No tiene turnos asignados'}")
+nurse_schedule = calendar_df[calendar_df["Enfermera"] == nurse_selected]
 
-with col2:
-    turn = st.selectbox("Selecciona un turno para ver quién lo trabaja:", range(1, df.shape[1]+1))
-    workers = df[df.iloc[:, turn-1] == 1].index.tolist()
-
-    st.write(f"**Enfermeras asignadas al turno {turn}:** {workers if workers else 'Nadie asignado'}")
-
-# ------------------ HEATMAP ------------------
-st.divider()
-st.subheader("🔥 Mapa visual de asignaciones")
-
-fig, ax = plt.subplots(figsize=(15, 6))
-sns.heatmap(df, cmap="Greys", cbar=False, ax=ax)
-ax.set_xlabel("Turnos")
-ax.set_ylabel("Enfermeras")
-st.pyplot(fig)
-
-# ------------------ INTERPRETACIÓN AUTOMÁTICA ------------------
-st.divider()
-st.subheader("📌 Resumen automático")
-
-total_assignments = df.values.sum()
-possible_assignments = df.size
-coverage_percent = round((total_assignments / possible_assignments) * 100, 2)
-
-st.write(f"""
-- Total de turnos asignados: **{total_assignments}**
-- Total posible: **{possible_assignments}**
-- Nivel de ocupación del sistema: **{coverage_percent}%**
-""")
-
-if coverage_percent < 10:
-    st.info("🔎 La solución es válida pero conservadora: el modelo asignó pocos turnos debido a las restricciones estrictas.")
-elif coverage_percent < 50:
-    st.success("👍 La carga laboral está distribuida de forma balanceada, respetando descansos y restricciones.")
+if nurse_schedule.empty:
+    st.warning("Esta enfermera no tiene turnos asignados.")
 else:
-    st.warning("⚠️ Alta carga de asignación: revisar reglas laborales o descansos.")
+    st.table(nurse_schedule)
 
-st.write("---")
-st.caption("Desarrollado con Python + Streamlit siguiendo el modelo propuesto por Yilmaz (2010).")
+st.divider()
+
+# ---------- Vista por turno ----------
+st.subheader("🕒 Buscar quién trabaja un turno específico")
+
+day_choice = st.selectbox("Día:", days)
+shift_choice = st.selectbox("Turno:", shift_names)
+
+workers = calendar_df[
+    (calendar_df["Día"] == day_choice) &
+    (calendar_df["Turno"] == shift_choice)
+]["Enfermera"].tolist()
+
+if len(workers) == 0:
+    st.info("Nadie cubre este turno.")
+else:
+    st.success(f"Trabajan: {', '.join(workers)}")
+
+st.divider()
+
+# ---------- Interpretación automática ----------
+st.subheader("📌 Interpretación automática")
+
+if coverage < 20:
+    st.write("🔍 El sistema asignó pocos turnos debido a reglas estrictas. Es un sistema conservador.")
+elif coverage < 60:
+    st.write("👍 La distribución es moderada. Respeta descansos y carga balanceada.")
+else:
+    st.write("⚠️ Alta ocupación. Podría afectar descansos y bienestar laboral.")
+
+st.caption("Modelo basado en programación entera binaria según Yilmaz (2010).")
