@@ -98,25 +98,3 @@ fig_bar = px.histogram(
     color_discrete_sequence=["#5A8DEE"]
 )
 st.plotly_chart(fig_bar, use_container_width=True)
-
-# ---------- Heatmap global ----------
-st.subheader("🗂️ Mapa completo de asignación")
-
-fig_global = px.imshow(
-    df.values,
-    labels=dict(x="Turnos (1-21)", y="Enfermeras"),
-    color_continuous_scale=["white", "#0077b6"],
-)
-st.plotly_chart(fig_global, use_container_width=True)
-
-# ---------- Interpretación automática ----------
-st.subheader("📌 Interpretación del modelo")
-
-if coverage < 20:
-    st.write("🔍 La asignación es baja: el modelo priorizó descanso y restricciones laborales.")
-elif coverage < 60:
-    st.write("👍 La carga está balanceada: buena relación entre descanso y cobertura.")
-else:
-    st.write("⚠️ Alta ocupación: riesgo de fatiga y sobrecarga laboral.")
-
-st.caption("📖 Modelo construido con programación entera binaria basado en Yilmaz (2012).")
