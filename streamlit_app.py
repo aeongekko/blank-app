@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.figure_factory as ff
 
 # ---------- CONFIGURACIÓN ----------
 st.set_page_config(layout="wide", page_title="Asignación de Turnos de Enfermería")
@@ -17,8 +16,8 @@ if not uploaded_file:
 
 df = pd.read_csv(uploaded_file)
 
-days = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]
-shift_names = ["Mañana","Tarde","Noche"]
+days = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+shift_names = ["Mañana", "Tarde", "Noche"]
 
 # ---------- Construcción de dataframe interpretable ----------
 calendar_df = pd.DataFrame(columns=["Enfermera", "Día", "Turno"])
@@ -28,7 +27,7 @@ for nurse_idx, row in df.iterrows():
         if value == 1:
             day = days[j // 3]
             shift = shift_names[j % 3]
-            calendar_df.loc[len(calendar_df)] = [f"Enfermera {nurse_idx+1}", day, shift]
+            calendar_df.loc[len(calendar_df)] = [f"Enfermera {nurse_idx + 1}", day, shift]
 
 # ---------- Resumen general ----------
 assigned = len(calendar_df)
@@ -42,66 +41,82 @@ col3.metric("⚙️ Ocupación del sistema", f"{coverage}%")
 
 st.divider()
 
-# ---------- Sección 1: Visualización por enfermera ----------
-st.subheader("🔎 Buscar horario de una enfermera")
-nurse_selected = st.selectbox("Seleccionar enfermera:", sorted(calendar_df["Enfermera"].unique()))
+# ---------- Bloque principal con dos columnas ----------
+left, right = st.columns(2)
 
-nurse_schedule = calendar_df[calendar_df["Enfermera"] == nurse_selected]
+# ------- IZQUIERDA: Buscar enfermera -------
+with left:
+    st.subheader("🔍 Buscar horario de una enfermera")
+    nurse_selected = st.selectbox(
+        "Seleccionar enfermera:", sorted(calendar_df["Enfermera"].unique())
+    )
+    nurse_schedule = calendar_df[calendar_df["Enfermera"] == nurse_selected]
 
-st.write("📍 Turnos asignados:")
-st.table(nurse_schedule)
+    st.write("📍 Turnos asignados:")
+    st.table(nurse_schedule)
 
-# ---------- Mini Heatmap personal ----------
-schedule_matrix = df.loc[int(nurse_selected.split(" ")[1]) - 1].values.reshape(7,3)
-fig_heat = px.imshow(schedule_matrix,
-                     labels=dict(x="Turno", y="Día"),
-                     x=shift_names, y=days,
-                     color_continuous_scale=["white", "blue"])
+    # Mini Heatmap individual
+    schedule_matrix = df.loc[int(nurse_selected.split(" ")[1]) - 1].values.reshape(7, 3)
+    fig_heat = px.imshow(
+        schedule_matrix,
+        labels=dict(x="Turno", y="Día"),
+        x=shift_names,
+        y=days,
+        color_continuous_scale=["white", "blue"],
+        title=f"Mapa de turnos para {nurse_selected}"
+    )
+    st.plotly_chart(fig_heat, use_container_width=True)
 
-st.plotly_chart(fig_heat, use_container_width=True)
+# ------- DERECHA: Buscar turno -------
+with right:
+    st.subheader("🕒 Buscar quién cubre un turno")
+    day_choice = st.selectbox("Día:", days)
+    shift_choice = st.selectbox("Turno:", shift_names)
 
+    workers = calendar_df[
+        (calendar_df["Día"] == day_choice) &
+        (calendar_df["Turno"] == shift_choice)
+    ]["Enfermera"].tolist()
+
+    if len(workers) == 0:
+        st.info("⛔ Nadie asignado a este turno.")
+    else:
+        st.success(f"👥 Trabajan: {', '.join(workers)}")
 
 st.divider()
 
-# ---------- Sección 2: Gráfico de carga por enfermera ----------
-st.subheader("📊 Distribución de carga por enfermera")
+# ---------- Distribución de carga ----------
+st.subheader("📊 Distribución de carga de trabajo")
 
 shifts_per_nurse = df.sum(axis=1)
-fig_bar = px.histogram(shifts_per_nurse, nbins=10,
-                       title="Distribución de cantidad de turnos asignados",
-                       labels={"value":"Turnos asignados", "count":"Número de enfermeras"})
 
+fig_bar = px.histogram(
+    shifts_per_nurse,
+    nbins=10,
+    title="Cantidad de turnos asignados por enfermera",
+    labels={"value": "Turnos asignados", "count": "Número de enfermeras"},
+    color_discrete_sequence=["#5A8DEE"]
+)
 st.plotly_chart(fig_bar, use_container_width=True)
 
+# ---------- Heatmap global ----------
+st.subheader("🗂️ Mapa completo de asignación")
 
-# ---------- Sección 3: Vista por turno ----------
-st.subheader("🕒 Buscar quién trabaja en un turno específico")
+fig_global = px.imshow(
+    df.values,
+    labels=dict(x="Turnos (1-21)", y="Enfermeras"),
+    color_continuous_scale=["white", "#0077b6"],
+)
+st.plotly_chart(fig_global, use_container_width=True)
 
-col_day, col_shift = st.columns(2)
-day_choice = col_day.selectbox("Día:", days)
-shift_choice = col_shift.selectbox("Turno:", shift_names)
-
-workers = calendar_df[
-    (calendar_df["Día"] == day_choice) &
-    (calendar_df["Turno"] == shift_choice)
-]["Enfermera"].tolist()
-
-if len(workers) == 0:
-    st.info("⛔ Ninguna enfermera asignada para este turno.")
-else:
-    st.success(f"👥 Trabajan: {', '.join(workers)}")
-
-
-st.divider()
-
-# ---------- Sección 4: Interpretación automática ----------
+# ---------- Interpretación automática ----------
 st.subheader("📌 Interpretación del modelo")
 
 if coverage < 20:
-    st.write("🔍 **Asignación baja**: el modelo es muy estricto o la demanda es baja.")
+    st.write("🔍 La asignación es baja: el modelo priorizó descanso y restricciones laborales.")
 elif coverage < 60:
-    st.write("👍 **Asignación balanceada**: buena proporción entre descanso y cobertura.")
+    st.write("👍 La carga está balanceada: buena relación entre descanso y cobertura.")
 else:
-    st.write("⚠️ **Alta carga laboral**: podría causar fatiga o riesgos laborales.")
+    st.write("⚠️ Alta ocupación: riesgo de fatiga y sobrecarga laboral.")
 
 st.caption("📖 Modelo construido con programación entera binaria basado en Yilmaz (2012).")
